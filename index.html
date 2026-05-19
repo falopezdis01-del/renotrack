@@ -7,6 +7,33 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="RenoTrack">
 <title>Renovatio · Centro de Mando</title>
+<style>
+#lock-screen {
+  position:fixed;inset:0;background:#0f0f0f;z-index:9999;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  font-family:'Syne',sans-serif;
+}
+.lock-logo { font-size:32px;font-weight:800;letter-spacing:-1px;color:#f0ede8; }
+.lock-logo span { color:#d4f542; }
+.lock-subtitle { font-size:13px;color:#666;font-family:'DM Mono',monospace;letter-spacing:1px; }
+.lock-form { display:flex;flex-direction:column;gap:12px;width:100%;max-width:300px; }
+.lock-input {
+  background:#1a1a1a;border:1px solid #2e2e2e;color:#f0ede8;
+  border-radius:10px;padding:13px 16px;font-size:16px;
+  font-family:'Syne',sans-serif;outline:none;text-align:center;
+  letter-spacing:3px;transition:border .15s;
+}
+.lock-input:focus { border-color:#d4f542; }
+.lock-input::placeholder { letter-spacing:0;color:#444; }
+.lock-btn {
+  background:#d4f542;color:#0f0f0f;border:none;border-radius:10px;
+  padding:13px;font-family:'Syne',sans-serif;font-size:14px;font-weight:800;
+  cursor:pointer;transition:all .15s;
+}
+.lock-btn:hover { background:#c8e835; }
+.lock-error { color:#ff5f5f;font-size:12px;text-align:center;font-family:'DM Mono',monospace;min-height:18px; }
+.lock-attempts { font-size:11px;color:#444;text-align:center;font-family:'DM Mono',monospace; }
+</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
@@ -330,6 +357,23 @@ body { background:var(--bg); color:var(--text); font-family:'Syne',sans-serif; m
 </style>
 </head>
 <body>
+
+<!-- LOCK SCREEN -->
+<div id="lock-screen" style="position:fixed;inset:0;background:#0f0f0f;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;font-family:'Syne',sans-serif;">
+  <div style="font-size:32px;font-weight:800;letter-spacing:-1px;color:#f0ede8">RENO<span style="color:#d4f542">.</span>TRACK</div>
+  <div style="font-size:11px;color:#666;font-family:'DM Mono',monospace;letter-spacing:2px">ACCESO SEGURO · RENOVATIO</div>
+  <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:300px;padding:0 24px;">
+    <input id="lockInput" type="password" placeholder="Contraseña" maxlength="30"
+      style="background:#1a1a1a;border:1px solid #2e2e2e;color:#f0ede8;border-radius:10px;padding:14px 16px;font-size:18px;font-family:'Syne',sans-serif;outline:none;text-align:center;letter-spacing:4px;width:100%"
+      onkeydown="if(event.key==='Enter')checkPass()" onfocus="this.style.borderColor='#d4f542'" onblur="this.style.borderColor='#2e2e2e'">
+    <button onclick="checkPass()"
+      style="background:#d4f542;color:#0f0f0f;border:none;border-radius:10px;padding:14px;font-family:'Syne',sans-serif;font-size:14px;font-weight:800;cursor:pointer;width:100%">
+      Entrar →
+    </button>
+    <div id="lockError" style="color:#ff5f5f;font-size:12px;text-align:center;font-family:'DM Mono',monospace;min-height:18px"></div>
+    <div id="lockAttempts" style="font-size:10px;color:#333;text-align:center;font-family:'DM Mono',monospace"></div>
+  </div>
+</div>
 
 <!-- VOICE OVERLAY -->
 <div class="voice-overlay" id="voiceOverlay">
@@ -1079,7 +1123,62 @@ window.addEventListener('storage',e=>{
   }
 });
 
-init();
+// ===== PASSWORD PROTECTION =====
+// Cambia 'Renovatio2025' por tu contraseña deseada
+const APP_PASS = 'Renovatio2025';
+const PASS_KEY = 'renovatrack_auth';
+let failedAttempts = 0;
+let lockUntil = 0;
+
+function checkPass() {
+  const now = Date.now();
+  if (now < lockUntil) {
+    const secs = Math.ceil((lockUntil - now) / 1000);
+    document.getElementById('lockError').textContent = `Espera ${secs} segundos`;
+    return;
+  }
+  const input = document.getElementById('lockInput').value;
+  if (input === APP_PASS) {
+    failedAttempts = 0;
+    sessionStorage.setItem(PASS_KEY, '1');
+    const ls = document.getElementById('lock-screen');
+    ls.style.opacity = '0';
+    ls.style.transition = 'opacity .4s';
+    setTimeout(() => ls.style.display = 'none', 400);
+    init();
+  } else {
+    failedAttempts++;
+    document.getElementById('lockInput').value = '';
+    if (failedAttempts >= 5) {
+      lockUntil = Date.now() + 30000;
+      document.getElementById('lockError').textContent = 'Demasiados intentos — espera 30 segundos';
+      document.getElementById('lockAttempts').textContent = '';
+      setTimeout(() => {
+        document.getElementById('lockError').textContent = '';
+        failedAttempts = 0;
+      }, 30000);
+    } else {
+      document.getElementById('lockError').textContent = 'Contraseña incorrecta';
+      document.getElementById('lockAttempts').textContent = `Intentos fallidos: ${failedAttempts}/5`;
+      setTimeout(() => document.getElementById('lockError').textContent = '', 2000);
+    }
+    // Shake animation
+    const input = document.getElementById('lockInput');
+    input.style.transform = 'translateX(-8px)';
+    setTimeout(() => input.style.transform = 'translateX(8px)', 100);
+    setTimeout(() => input.style.transform = 'translateX(-4px)', 200);
+    setTimeout(() => input.style.transform = 'translateX(0)', 300);
+  }
+}
+
+// Check if already authenticated this session
+if (sessionStorage.getItem(PASS_KEY) === '1') {
+  document.getElementById('lock-screen').style.display = 'none';
+  init();
+} else {
+  // Don't init until password is correct
+  setTimeout(() => document.getElementById('lockInput').focus(), 300);
+}
 </script>
 </body>
 </html>
